@@ -1,9 +1,10 @@
-from flask import Flask, render_template, request, jsonify, send_file
+genaipple flask import Flask, render_template, request, jsonify, send_file
 import os
 import re
 import asyncio
 import edge_tts
 import tempfile
+from google import genai
 
 app = Flask(__name__)
 
@@ -81,6 +82,30 @@ Transcript:
 {transcript}
 """
 
+def generate_ai_recap(transcript, style):
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+
+    if not api_key:
+        raise Exception(
+            "GEMINI_API_KEY မထည့်ရသေးပါ"
+        )
+
+    client = genai.Client(
+        api_key=api_key
+    )
+
+    prompt = make_prompt(
+        transcript,
+        style
+    )
+
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt
+    )
+
+    return response.text.strip()
 
 # =========================
 # TTS
@@ -254,7 +279,10 @@ def recap():
     # AI API နဲ့ အစားထိုးမယ်.
     #
 
-    script = cleaned
+    script = generate_ai_recap(
+    cleaned,
+    style
+    )
 
 
     # Temporary directory
