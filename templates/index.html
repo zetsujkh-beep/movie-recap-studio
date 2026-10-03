@@ -1,135 +1,301 @@
-
-<!doctype html>
+<!DOCTYPE html>
 <html lang="my">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Movie Recap Studio</title>
-<style>
-*{box-sizing:border-box}
-body{margin:0;background:#101114;color:#f3f3f3;font-family:system-ui,-apple-system,"Noto Sans Myanmar",sans-serif}
-.wrap{max-width:850px;margin:auto;padding:18px}
-h1{font-size:25px;margin:8px 0 4px}
-.sub{color:#9da0a8;font-size:13px;margin-bottom:18px}
-.card{background:#191b20;border:1px solid #2b2e36;border-radius:16px;padding:16px;margin:12px 0}
-label{display:block;font-size:13px;color:#bbb;margin-bottom:7px}
-input,select,textarea,button{width:100%;border-radius:11px;border:1px solid #363944;background:#111318;color:#fff;padding:12px;font:inherit}
-textarea{min-height:240px;resize:vertical;line-height:1.65}
-button{background:#eee;color:#111;border:0;font-weight:700;margin-top:10px}
-button.secondary{background:#292c34;color:#fff}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.status{font-size:13px;color:#9fd4a5;margin-top:9px;white-space:pre-wrap}
-.prompt{min-height:170px}
-audio{width:100%;margin-top:12px}
-.small{font-size:12px;color:#8e929b;line-height:1.5}
-@media(max-width:600px){.grid{grid-template-columns:1fr}}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movie Recap Studio</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: #101114;
+            color: #ffffff;
+            font-family: Arial, sans-serif;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: auto;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #999;
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin: 18px 0 8px;
+            font-weight: bold;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 300px;
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid #333;
+            background: #191b20;
+            color: white;
+            font-size: 15px;
+            line-height: 1.6;
+            resize: vertical;
+            outline: none;
+        }
+
+        select,
+        button {
+            width: 100%;
+            padding: 14px;
+            margin-top: 8px;
+            border-radius: 10px;
+            border: none;
+            font-size: 16px;
+        }
+
+        select {
+            background: #191b20;
+            color: white;
+            border: 1px solid #333;
+        }
+
+        button {
+            background: #ffffff;
+            color: #111;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .output {
+            margin-top: 25px;
+        }
+
+        .box {
+            background: #191b20;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 15px;
+            margin-top: 12px;
+        }
+
+        .box h3 {
+            margin-top: 0;
+        }
+
+        .download {
+            display: block;
+            text-align: center;
+            background: #2a2d35;
+            color: white;
+            text-decoration: none;
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+
+        #status {
+            text-align: center;
+            margin-top: 15px;
+            color: #aaa;
+        }
+    </style>
 </head>
+
 <body>
-<div class="wrap">
-  <h1>🎬 Movie Recap Studio</h1>
-  <div class="sub">Phone-friendly • Version 1 • SRT → Recap Script → Burmese TTS</div>
 
-  <div class="card">
-    <label>① Movie Subtitle (.srt)</label>
-    <input id="srt" type="file" accept=".srt,.vtt,.txt">
-    <button onclick="loadSrt()">Subtitle ဖတ်မယ်</button>
-    <div id="status" class="status"></div>
-  </div>
+<div class="container">
 
-  <div class="card">
-    <label>② Transcript / Subtitle</label>
-    <textarea id="transcript" placeholder="SRT ထည့်ပြီးရင် ဒီမှာ စာပေါ်လာပါမယ်။"></textarea>
-    <button class="secondary" onclick="makePrompt()">AI Recap Prompt ပြင်မယ်</button>
-    <textarea id="prompt" class="prompt" placeholder="AI ကိုပေးဖို့ prompt..."></textarea>
-    <div class="small">ဒီ V1 မှာ AI API ကို မထည့်သေးပါ။ Prompt ကို free AI chat ထဲ paste လုပ်ပြီး recap script ရယူနိုင်ပါတယ်။</div>
-  </div>
+    <h1>🎬 Movie Recap Studio</h1>
 
-  <div class="card">
-    <label>③ Final Burmese Recap Script</label>
-    <textarea id="script" placeholder="AI ကထုတ်ပေးတဲ့ recap script ကို ဒီမှာ paste/edit လုပ်ပါ။"></textarea>
-    <div class="grid">
-      <div>
-        <label>Voice</label>
-        <select id="gender"><option value="male">မြန်မာ အမျိုးသား</option><option value="female">မြန်မာ အမျိုးသမီး</option></select>
-      </div>
-      <div>
-        <label>Speed</label>
-        <select id="rate"><option value="-10%">နည်းနည်းနှေး</option><option value="+0%" selected>ပုံမှန်</option><option value="+10%">နည်းနည်းမြန်</option><option value="+20%">မြန်</option></select>
-      </div>
+    <div class="subtitle">
+        Transcript → Myanmar Recap → MP3 → SRT
     </div>
-    <button onclick="tts()">🔊 Generate Burmese Voice</button>
-    <div id="ttsStatus" class="status"></div>
-    <audio id="player" controls></audio>
-    <a id="download" style="display:none;color:#fff" download="movie-recap-voice.mp3">⬇️ MP3 Download</a>
-  </div>
 
-  <div class="card">
-    <b>🚧 Next Version</b>
-    <div class="small" style="margin-top:8px">
-      Movie upload → Whisper transcript → automatic recap → scene detection → subtitle → music → watermark → 9:16 MP4.
+    <label>🎞️ Transcript</label>
+
+    <textarea
+        id="transcript"
+        placeholder="ဒီနေရာမှာ ဇာတ်ကား Transcript ကို Paste လုပ်ပါ..."
+    ></textarea>
+
+    <label>📝 Recap Style</label>
+
+    <select id="style">
+        <option value="natural">Natural Movie Recap</option>
+        <option value="fast">Fast & Engaging</option>
+        <option value="cinematic">Cinematic</option>
+    </select>
+
+    <label>🎙️ Voice</label>
+
+    <select id="voice">
+        <option value="male">Male</option>
+        <option value="female">Female</option>
+    </select>
+
+    <label>⚡ Speed</label>
+
+    <select id="speed">
+        <option value="0.9">0.9x</option>
+        <option value="1.0" selected>1.0x</option>
+        <option value="1.1">1.1x</option>
+        <option value="1.2">1.2x</option>
+        <option value="1.3">1.3x</option>
+    </select>
+
+    <button onclick="generateRecap()">
+        🚀 Generate Recap
+    </button>
+
+    <div id="status"></div>
+
+    <div class="output">
+
+        <div class="box">
+            <h3>📝 Recap Script</h3>
+
+            <textarea
+                id="script"
+                placeholder="Recap script ဒီမှာပေါ်ပါမယ်..."
+            ></textarea>
+        </div>
+
+        <div class="box">
+            <h3>🎙️ MP3</h3>
+
+            <audio id="audio" controls style="width:100%;"></audio>
+
+            <a
+                id="mp3Download"
+                class="download"
+                style="display:none;"
+            >
+                ⬇️ Download MP3
+            </a>
+        </div>
+
+        <div class="box">
+            <h3>💬 SRT</h3>
+
+            <a
+                id="srtDownload"
+                class="download"
+                style="display:none;"
+            >
+                ⬇️ Download SRT
+            </a>
+        </div>
+
     </div>
-  </div>
+
 </div>
 
 <script>
-async function loadSrt(){
-  const f=document.getElementById('srt').files[0];
-  if(!f){alert('SRT ဖိုင်ရွေးပါ');return}
-  const fd=new FormData();fd.append('file',f);
-  setStatus('ဖတ်နေပါတယ်...');
-  const r=await fetch('/api/srt',{method:'POST',body:fd});
-  const d=await r.json();
-  if(d.error){setStatus(d.error);return}
-  document.getElementById('transcript').value=d.text;
-  document.getElementById('prompt').value=d.prompt;
-  setStatus('အောင်မြင်ပါတယ် • '+d.chars+' characters');
-}
-function setStatus(x){document.getElementById('status').textContent=x}
-function makePrompt(){
-  const t=document.getElementById('transcript').value;
-  document.getElementById('prompt').value=
-`အောက်က Movie transcript ကို မြန်မာ Movie Recap voice-over အဖြစ် ပြန်ရေးပါ။
 
-စည်းကမ်း:
-- အစမှာ စိတ်ဝင်စားစေမယ့် Hook ထည့်ပါ။
-- ဇာတ်လမ်းအဓိကဖြစ်ရပ်တွေ မပျောက်ပါစေနဲ့။
-- မြန်မာစကားပြောဟန် သဘာဝကျကျရေးပါ။
-- Scene အစဉ်မပျက်ပါစေနဲ့။
-- Dialogue များကို မကူးပါနဲ့။
-- Voice-over ဖတ်ရလွယ်အောင် စာကြောင်းတိုတိုရေးပါ။
-- Ending ကိုပါ ရှင်းပြပါ။
+async function generateRecap() {
 
-TRANSCRIPT:
-${t.slice(0,12000)}`;
+    const transcript =
+        document.getElementById("transcript").value.trim();
+
+    const style =
+        document.getElementById("style").value;
+
+    const voice =
+        document.getElementById("voice").value;
+
+    const speed =
+        document.getElementById("speed").value;
+
+    const status =
+        document.getElementById("status");
+
+    if (!transcript) {
+        alert("Transcript ထည့်ပေးပါ။");
+        return;
+    }
+
+    status.innerText = "⏳ Processing...";
+
+    try {
+
+        const response = await fetch("/api/recap", {
+
+            method: "POST",
+
+            headers: {
+                "Content-Type": "application/json"
+            },
+
+            body: JSON.stringify({
+                transcript: transcript,
+                style: style,
+                voice: voice,
+                speed: speed
+            })
+
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || "Something went wrong");
+        }
+
+        document.getElementById("script").value =
+            data.script;
+
+        if (data.mp3) {
+
+            const audio =
+                document.getElementById("audio");
+
+            audio.src = data.mp3;
+
+            const mp3Download =
+                document.getElementById("mp3Download");
+
+            mp3Download.href = data.mp3;
+            mp3Download.download = "movie-recap.mp3";
+            mp3Download.style.display = "block";
+        }
+
+        if (data.srt) {
+
+            const srtDownload =
+                document.getElementById("srtDownload");
+
+            srtDownload.href = data.srt;
+            srtDownload.download = "movie-recap.srt";
+            srtDownload.style.display = "block";
+        }
+
+        status.innerText = "✅ Recap ပြီးပါပြီ";
+
+    } catch (error) {
+
+        status.innerText =
+            "❌ Error: " + error.message;
+
+    }
+
 }
-async function tts(){
-  const text=document.getElementById('script').value.trim();
-  if(!text){alert('Recap Script ထည့်ပါ');return}
-  document.getElementById('ttsStatus').textContent='အသံထုတ်နေပါတယ်...';
-  const r=await fetch('/api/tts',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({
-      text,
-      gender:document.getElementById('gender').value,
-      rate:document.getElementById('rate').value,
-      pitch:'+0Hz'
-    })
-  });
-  if(!r.ok){
-    const d=await r.json().catch(()=>({error:'TTS error'}));
-    document.getElementById('ttsStatus').textContent=d.error||'TTS error';
-    return;
-  }
-  const blob=await r.blob();
-  const url=URL.createObjectURL(blob);
-  document.getElementById('player').src=url;
-  const a=document.getElementById('download');
-  a.href=url;a.style.display='block';
-  document.getElementById('ttsStatus').textContent='အသံထွက်ပြီးပါပြီ။';
-}
+
 </script>
-</body>
-                                               </html>
 
+</body>
+</html>
