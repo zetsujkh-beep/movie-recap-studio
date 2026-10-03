@@ -401,6 +401,11 @@ def health():
         "status": "ok"
     }
 
+@app.errorhandler(Exception)
+def handle_error(e):
+    return jsonify({
+        "error": str(e)
+    }), 500
 
 # =========================
 # START
