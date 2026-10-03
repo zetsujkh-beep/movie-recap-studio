@@ -87,14 +87,56 @@ def generate_ai_recap(transcript, style):
     api_key = os.environ.get("GEMINI_API_KEY")
 
     if not api_key:
-        raise Exception(
-            "GEMINI_API_KEY မထည့်ရသေးပါ"
-        )
+        raise Exception("GEMINI_API_KEY မထည့်ရသေးပါ")
 
-    client = genai.Client(
-        api_key=api_key
+    client = genai.Client(api_key=api_key)
+
+    prompt = make_prompt(transcript, style)
+
+    models = [
+        "gemini-3.8-flash",
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash"
+    ]
+
+    last_error = None
+
+    for model in models:
+
+        for attempt in range(3):
+
+            try:
+
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt
+                )
+
+                if response.text:
+                    return response.text.strip()
+
+            except Exception as e:
+
+                last_error = e
+
+                error_text = str(e)
+
+                if "503" in error_text or "UNAVAILABLE" in error_text:
+
+                    import time
+
+                    time.sleep(2 ** attempt)
+
+                    continue
+
+                break
+
+    raise Exception(
+        f"Gemini models temporarily unavailable. "
+        f"Last error: {last_error}"
     )
-
+    
     prompt = make_prompt(
         transcript,
         style
