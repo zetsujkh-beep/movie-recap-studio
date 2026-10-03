@@ -1,113 +1,391 @@
-
 from flask import Flask, render_template, request, jsonify, send_file
-import edge_tts
-import asyncio
 import os
 import re
+import asyncio
+import edge_tts
 import tempfile
-import uuid
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
 
-VOICES = {
-    "male": "my-MM-ThihaNeural",
-    "female": "my-MM-NilarNeural",
-}
 
-def clean_srt(text):
-    text = text.replace("\r", "")
-    lines = text.split("\n")
-    out = []
-    for line in lines:
-        s = line.strip()
-        if not s:
-            continue
-        if re.fullmatch(r"\d+", s):
-            continue
-        if re.match(r"^\d\d:\d\d:\d\d[,.]\d+\s+-->\s+\d\d:\d\d:\d\d[,.]\d+", s):
-            continue
-        s = re.sub(r"<[^>]+>", "", s)
-        out.append(s)
-    return "\n".join(out)
+# =========================
+# HOME
+# =========================
 
-def build_recap_prompt(transcript):
-    return f"""အောက်က Movie transcript/subtitle ကို Movie Recap အတွက် မြန်မာလို ပြန်ရေးပါ။
+@app.route("/")
+def home():
+    return render_template("index.html")
 
-စည်းကမ်းများ:
-- ဇာတ်လမ်းကို မပျက်စေဘဲ အဓိကဖြစ်ရပ်တွေကိုပဲ ရွေးပါ။
-- မြန်မာစကားပြောဟန်နဲ့ သဘာဝကျကျရေးပါ။
-- အစမှာ ကြည့်ချင်စေမယ့် Hook တစ်ကြောင်း ထည့်ပါ။
-- ဇာတ်ကောင်တွေကို နားလည်လွယ်အောင် ရှင်းပြပါ။
-- မလိုအပ်တဲ့ dialogue တွေ မထည့်ပါနဲ့။
-- Scene အစဉ်မပျက်ထားပါ။
-- Ending ကိုလည်း အတိုချုံးရှင်းပြပါ။
-- English စကားလုံးတွေ မလိုအပ်ရင် မြန်မာလိုရေးပါ။
-- Voice-over ဖတ်ရလွယ်အောင် စာကြောင်းတိုတိုရေးပါ။
 
-TRANSCRIPT:
+# =========================
+# CLEAN TRANSCRIPT
+# =========================
+
+def clean_transcript(text):
+    text = re.sub(r'\[.*?\]', '', text)
+    text = re.sub(r'\(.*?\)', '', text)
+
+    lines = []
+
+    for line in text.splitlines():
+        line = line.strip()
+
+        if line:
+            lines.append(line)
+
+    return " ".join(lines)
+
+
+# =========================
+# RECAP PROMPT
+# =========================
+
+def make_prompt(transcript, style):
+
+    style_text = {
+        "natural":
+            "စကားပြောသလို သဘာဝကျပြီး နားထောင်လို့ကောင်းအောင် ရေးပါ။",
+
+        "fast":
+            "အရှိန်မြန်ပြီး စိတ်ဝင်စားစရာကောင်းအောင် ရေးပါ။ မလိုအပ်တဲ့အပိုင်းတွေကို ချုံ့ပါ။",
+
+        "cinematic":
+            "ရုပ်ရှင်ပြန်ပြောပြသလို cinematic feeling ရအောင် ရေးပါ။"
+    }
+
+    selected_style = style_text.get(
+        style,
+        style_text["natural"]
+    )
+
+    return f"""
+You are a professional movie recap writer.
+
+Rewrite the following movie transcript into a Burmese
+movie recap narration.
+
+Rules:
+
+- Write in natural spoken Burmese.
+- Do not translate word-for-word.
+- Keep the original story and events accurate.
+- Remove unnecessary dialogue.
+- Make the narration interesting.
+- Do not invent events that are not in the transcript.
+- Do not use section headings.
+- Write continuously as a narration.
+- {selected_style}
+
+Transcript:
+
 {transcript}
 """
 
-async def make_tts(text, voice, rate, pitch, output):
+
+# =========================
+# TTS
+# =========================
+
+VOICE_MALE = "my-MM-ThihaNeural"
+VOICE_FEMALE = "my-MM-NilarNeural"
+
+
+async def create_voice(text, voice, speed, output_file):
+
+    selected_voice = (
+        VOICE_MALE
+        if voice == "male"
+        else VOICE_FEMALE
+    )
+
+    speed_value = float(speed)
+
+    # Convert 1.0x → +0%
+    percentage = int((speed_value - 1) * 100)
+
+    if percentage >= 0:
+        rate = f"+{percentage}%"
+    else:
+        rate = f"{percentage}%"
+
     communicate = edge_tts.Communicate(
         text=text,
-        voice=voice,
-        rate=rate,
-        pitch=pitch
+        voice=selected_voice,
+        rate=rate
     )
-    await communicate.save(output)
 
-@app.route("/")
-def index():
-    return render_template("index.html")
+    await communicate.save(output_file)
 
-@app.route("/api/srt", methods=["POST"])
-def srt_api():
-    f = request.files.get("file")
-    if not f:
-        return jsonify({"error": "SRT ဖိုင်ရွေးပါ"}), 400
-    raw = f.read().decode("utf-8-sig", errors="ignore")
-    cleaned = clean_srt(raw)
-    return jsonify({
-        "text": cleaned,
-        "chars": len(cleaned),
-        "prompt": build_recap_prompt(cleaned[:12000])
-    })
 
-@app.route("/api/tts", methods=["POST"])
-def tts_api():
-    data = request.get_json(silent=True) or {}
-    text = (data.get("text") or "").strip()
-    gender = data.get("gender", "male")
-    rate = data.get("rate", "+0%")
-    pitch = data.get("pitch", "+0Hz")
+# =========================
+# CREATE SIMPLE SRT
+# =========================
 
-    if not text:
-        return jsonify({"error": "Script မရှိပါ"}), 400
-    if len(text) > 5000:
-        return jsonify({"error": "တစ်ခါလျှင် စာလုံး 5000 အထိပဲ ထည့်ပါ"}), 400
+def create_srt(text, output_file):
 
-    rate = str(rate)
-    pitch = str(pitch)
-    if not re.fullmatch(r"[+-]\d{1,3}%", rate):
-        rate = "+0%"
-    if not re.fullmatch(r"[+-]\d{1,3}Hz", pitch):
-        pitch = "+0Hz"
+    sentences = re.split(
+        r'(?<=[။.!?])\s+',
+        text.strip()
+    )
 
-    filename = f"recap_{uuid.uuid4().hex}.mp3"
-    path = os.path.join(tempfile.gettempdir(), filename)
+    sentences = [
+        x.strip()
+        for x in sentences
+        if x.strip()
+    ]
+
+    current_time = 0
+    srt_lines = []
+
+    for index, sentence in enumerate(sentences, 1):
+
+        # Rough estimate:
+        # Burmese narration ~ 4 chars / second
+        duration = max(
+            2,
+            round(len(sentence) / 4)
+        )
+
+        start = current_time
+        end = current_time + duration
+
+        srt_lines.append(
+            str(index)
+        )
+
+        srt_lines.append(
+            f"{format_time(start)} --> "
+            f"{format_time(end)}"
+        )
+
+        srt_lines.append(sentence)
+        srt_lines.append("")
+
+        current_time = end
+
+    with open(
+        output_file,
+        "w",
+        encoding="utf-8"
+    ) as f:
+
+        f.write(
+            "\n".join(srt_lines)
+        )
+
+
+def format_time(seconds):
+
+    hours = int(seconds // 3600)
+
+    minutes = int(
+        (seconds % 3600) // 60
+    )
+
+    secs = int(seconds % 60)
+
+    milliseconds = 0
+
+    return (
+        f"{hours:02d}:"
+        f"{minutes:02d}:"
+        f"{secs:02d},"
+        f"{milliseconds:03d}"
+    )
+
+
+# =========================
+# RECAP API
+# =========================
+
+@app.route("/api/recap", methods=["POST"])
+def recap():
+
+    data = request.get_json()
+
+    if not data:
+        return jsonify({
+            "error": "No data received"
+        }), 400
+
+    transcript = data.get(
+        "transcript",
+        ""
+    ).strip()
+
+    style = data.get(
+        "style",
+        "natural"
+    )
+
+    voice = data.get(
+        "voice",
+        "male"
+    )
+
+    speed = data.get(
+        "speed",
+        "1.0"
+    )
+
+    if not transcript:
+
+        return jsonify({
+            "error": "Transcript is empty"
+        }), 400
+
+
+    # Clean transcript
+
+    cleaned = clean_transcript(
+        transcript
+    )
+
+
+    # --------------------------------
+    # TEMPORARY TEST
+    # --------------------------------
+    #
+    # AI API မချိတ်ရသေးတဲ့အတွက်
+    # အခု transcript ကို test အနေနဲ့
+    # script အဖြစ်ပြန်သုံးထားပါတယ်။
+    #
+    # နောက်အဆင့်မှာ ဒီနေရာကို
+    # AI API နဲ့ အစားထိုးမယ်.
+    #
+
+    script = cleaned
+
+
+    # Temporary directory
+
+    temp_dir = tempfile.gettempdir()
+
+    mp3_file = os.path.join(
+        temp_dir,
+        "movie_recap.mp3"
+    )
+
+    srt_file = os.path.join(
+        temp_dir,
+        "movie_recap.srt"
+    )
+
+
+    # Generate voice
 
     try:
-        asyncio.run(make_tts(text, VOICES.get(gender, VOICES["male"]), rate, pitch, path))
-        return send_file(path, mimetype="audio/mpeg", as_attachment=True, download_name="movie-recap-voice.mp3")
-    except Exception as e:
-        return jsonify({"error": "TTS ထုတ်ရာမှာ အမှားဖြစ်ပါတယ်", "detail": str(e)}), 500
 
-@app.get("/health")
+        asyncio.run(
+            create_voice(
+                script,
+                voice,
+                speed,
+                mp3_file
+            )
+        )
+
+    except Exception as e:
+
+        return jsonify({
+            "error":
+                "TTS error: " + str(e)
+        }), 500
+
+
+    # Generate SRT
+
+    create_srt(
+        script,
+        srt_file
+    )
+
+
+    return jsonify({
+
+        "script": script,
+
+        "mp3":
+            "/api/download/mp3",
+
+        "srt":
+            "/api/download/srt"
+
+    })
+
+
+# =========================
+# DOWNLOAD MP3
+# =========================
+
+@app.route("/api/download/mp3")
+def download_mp3():
+
+    file = os.path.join(
+        tempfile.gettempdir(),
+        "movie_recap.mp3"
+    )
+
+    if not os.path.exists(file):
+
+        return "MP3 not found", 404
+
+    return send_file(
+        file,
+        as_attachment=True,
+        download_name="movie-recap.mp3",
+        mimetype="audio/mpeg"
+    )
+
+
+# =========================
+# DOWNLOAD SRT
+# =========================
+
+@app.route("/api/download/srt")
+def download_srt():
+
+    file = os.path.join(
+        tempfile.gettempdir(),
+        "movie_recap.srt"
+    )
+
+    if not os.path.exists(file):
+
+        return "SRT not found", 404
+
+    return send_file(
+        file,
+        as_attachment=True,
+        download_name="movie-recap.srt",
+        mimetype="text/plain"
+    )
+
+
+# =========================
+# HEALTH CHECK
+# =========================
+
+@app.route("/health")
 def health():
-    return {"status": "ok"}
+
+    return {
+        "status": "ok"
+    }
+
+
+# =========================
+# START
+# =========================
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+
+    app.run(
+        host="0.0.0.0",
+        port=int(
+            os.environ.get(
+                "PORT",
+                5000
+            )
+        )
+    )
